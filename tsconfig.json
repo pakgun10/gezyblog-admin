@@ -1,0 +1,1 @@
+{"compilerOptions":{"module":"ESNext","moduleResolution":"bundler","noEmit":true,"skipLibCheck":true,"strict":false,"target":"ESNext","types":["bun"]},"include":["src/**/*.ts","scripts/**/*.ts"]}

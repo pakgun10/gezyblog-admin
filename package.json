@@ -1,0 +1,22 @@
+{
+  "name": "blog-admin",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "bun run src/index.ts",
+    "build": "bun run scripts/build-client.ts",
+    "hash": "bun run scripts/hash-password.ts",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@milkdown/crepe": "^7.23.0",
+    "katex": "^0.19.1"
+  }
+}
