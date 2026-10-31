@@ -27,6 +27,25 @@ interface PendingSave {
   slug: string; isNew: boolean; isAbout: boolean;
   content: string; file: string; featuredFile?: { name: string; bytes: Uint8Array };
   liveUrl: string;
+  // Isi berkas saat pratinjau dibuat. Dipakai di konfirmasi: bila berkas
+  // sudah berubah di GitHub sejak pratinjau (mis. ada push baru), simpan
+  // dibatalkan supaya tidak menimpa perubahan itu diam-diam.
+  oldContent: string;
+}
+
+// Tarik versi terbaru dari GitHub sebelum membaca berkas untuk ditampilkan.
+// Sebelum perbaikan ini, halaman daftar/edit hanya membaca clone di disk,
+// yang bisa ketinggalan push terbaru (mis. dari Gezymuse) — editor lalu
+// menampilkan versi lama dan simpan menimpanya. Pull gagal (mis. ada
+// perubahan lokal) tidak boleh diam-diam: pemanggil menampilkan peringatan.
+async function pullLatest(): Promise<{ ok: boolean; out: string }> {
+  const hasRemote = (await runGit(REPO, ["remote"])).out.trim().length > 0;
+  if (!hasRemote) return { ok: true, out: "" };
+  return runGit(REPO, ["pull", "--ff-only"]);
+}
+function pullWarning(pull: { ok: boolean; out: string }): string {
+  if (pull.ok) return "";
+  return `<div class="err">Gagal menarik versi terbaru dari GitHub — yang ditampilkan mungkin versi lama. Jangan simpan dulu sebelum pull berhasil. Detail: ${esc(pull.out.slice(0, 300))}</div>`;
 }
 
 function cookie(req: Request): string | null {
@@ -86,13 +105,14 @@ function loginPage(err = ""): string {
 function editPage(opts: {
   slug: string; isNew: boolean; isAbout: boolean; meta: ReturnType<typeof parseMeta>;
   editorBody: string; protectedItems: ProtectedItem[]; featuredExists: string;
+  notice?: string;
 }): string {
-  const { slug, isNew, isAbout, meta, editorBody, protectedItems, featuredExists } = opts;
+  const { slug, isNew, isAbout, meta, editorBody, protectedItems, featuredExists, notice } = opts;
   const dataJson = JSON.stringify(editorBody).replace(/</g, "\\u003c");
   const protJson = JSON.stringify(protectedItems).replace(/</g, "\\u003c");
   const title = isAbout ? "Edit Tentang Saya" : isNew ? "Artikel Baru" : "Edit Artikel";
   return page(title, `
-  <p><a href="/posts">← Daftar artikel</a></p>
+  <p><a href="/posts">← Daftar artikel</a></p>${notice || ""}
   <div id="status"></div><div id="editor-error" class="err" style="display:none"></div>
   <div class="card">
   <label>Judul</label><input id="title" type="text" value="${esc(meta.title)}">
@@ -176,12 +196,13 @@ Bun.serve({
     if (path === "/" ) return html(302, "", { Location: "/posts" });
     if (path === "/posts") {
       const q = url.searchParams.get("q") || "";
+      const pull = await pullLatest();
       const posts = await listPosts(q);
       const rows = posts.map((p) => `<div class="card post">
         ${p.featured ? `<img src="/media/posts/${esc(p.slug)}/${esc(p.featured)}" alt="" loading="lazy">` : ""}
         <div><b><a href="/posts/${esc(p.slug)}/edit">${esc(p.title)}</a></b>
         <div class="muted">${esc(p.slug)} · ${esc(p.date.slice(0, 10))} ${p.draft ? "· DRAF" : ""}</div></div></div>`).join("");
-      return html(200, page("Daftar Artikel", `
+      return html(200, page("Daftar Artikel", `${pullWarning(pull)}
         <form method="get" action="/posts"><input type="text" name="q" value="${esc(q)}" placeholder="Cari judul artikel…">
         <p><button type="submit">Cari</button> <a class="btn" href="/posts/new">+ Artikel Baru</a> <a class="btn secondary" href="/about/edit">Edit Tentang Saya</a> <a class="btn secondary" href="/api/logout">Keluar</a></p></form>
         <p class="muted">${posts.length} artikel. Menyimpan di sini = commit + push ke GitHub, lalu Cloudflare membangun ulang.</p>${rows || "<p>Belum ada artikel yang cocok.</p>"}`));
@@ -191,19 +212,21 @@ Bun.serve({
       return html(200, editPage({ slug: "", isNew: true, isAbout: false, meta, editorBody: "", protectedItems: [], featuredExists: "" }));
     }
     if (path === "/about/edit") {
+      const pull = await pullLatest();
       const file = join(REPO, "content", "about", "index.md");
       const raw = await Bun.file(file).text();
       const { fm, body } = parseFile(raw);
       const { editorBody, protectedItems } = toEditorBody(body);
-      return html(200, editPage({ slug: "__about__", isNew: false, isAbout: true, meta: parseMeta(fm), editorBody, protectedItems, featuredExists: "" }));
+      return html(200, editPage({ slug: "__about__", isNew: false, isAbout: true, meta: parseMeta(fm), editorBody, protectedItems, featuredExists: "", notice: pullWarning(pull) }));
     }
     const editMatch = path.match(/^\/posts\/([a-z0-9-]+)\/edit$/);
     if (editMatch) {
       const slug = editMatch[1];
       try {
+        const pull = await pullLatest();
         const { body, meta } = await readPost(slug);
         const { editorBody, protectedItems } = toEditorBody(body);
-        return html(200, editPage({ slug, isNew: false, isAbout: false, meta, editorBody, protectedItems, featuredExists: meta.featuredImage }));
+        return html(200, editPage({ slug, isNew: false, isAbout: false, meta, editorBody, protectedItems, featuredExists: meta.featuredImage, notice: pullWarning(pull) }));
       } catch { return html(404, page("Tidak ditemukan", `<p>Artikel <code>${esc(slug)}</code> tidak ditemukan.</p><p><a href="/posts">Kembali</a></p>`)); }
     }
     const mediaMatch = path.match(/^\/media\/posts\/([a-z0-9-]+)\/(.+)$/);
@@ -268,7 +291,7 @@ Bun.serve({
         const content = `---\n${newFm}\n---\n\n${body.trim()}\n`;
         const diff = await unifiedDiff(oldContent, content);
         const token = crypto.randomUUID();
-        pending.set(token, { slug: "__about__", isNew: false, isAbout: true, content, file, liveUrl: `${PUBLIC_URL}/about/` });
+        pending.set(token, { slug: "__about__", isNew: false, isAbout: true, content, file, liveUrl: `${PUBLIC_URL}/about/`, oldContent });
         setTimeout(() => pending.delete(token), 10 * 60 * 1000);
         return json({ token, diff, note: "Tentang Saya. Periksa diff di bawah sebelum menyimpan." });
       }
@@ -294,7 +317,7 @@ Bun.serve({
       }
       const diff = await unifiedDiff(oldContent, content);
       const token = crypto.randomUUID();
-      pending.set(token, { slug: finalSlug, isNew, isAbout: false, content, file, liveUrl: `${PUBLIC_URL}/posts/${finalSlug}/` });
+      pending.set(token, { slug: finalSlug, isNew, isAbout: false, content, file, liveUrl: `${PUBLIC_URL}/posts/${finalSlug}/`, oldContent });
       setTimeout(() => pending.delete(token), 10 * 60 * 1000);
       return json({ token, diff, note: isNew ? `Artikel baru: ${finalSlug}` : `Mengubah: ${finalSlug}` });
     }
@@ -325,6 +348,16 @@ Bun.serve({
           await runGit(REPO, ["rebase", "--abort"]);
           return json({ error: `Gagal menarik perubahan terbaru dari GitHub, simpanan dibatalkan supaya tidak menimpa: ${pull.out.slice(0, 300)}` }, 409);
         }
+      }
+      // Pengaman timpa: bila berkas sudah berubah sejak pratinjau dibuat
+      // (mis. push baru masuk setelah editor dibuka), batalkan simpan.
+      // Tanpa cek ini, pull di atas justru memperbarui berkas lalu isi
+      // pratinjau lama menimpanya kembali — persis kasus tautan portal
+      // Tentang Saya yang kembali ke gezytech.web.id pada 2026-10-31.
+      let current = "";
+      try { current = await Bun.file(p.file).text(); } catch { current = ""; }
+      if (current !== p.oldContent) {
+        return json({ error: "Berkas sudah berubah di GitHub sejak pratinjau dibuat. Simpanan dibatalkan supaya tidak menimpa. Muat ulang halaman edit, lalu buat pratinjau lagi." }, 409);
       }
       const dir = join(p.file, "..");
       await import("node:fs/promises").then((m) => m.mkdir(dir, { recursive: true }));
