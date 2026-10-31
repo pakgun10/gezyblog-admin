@@ -108,7 +108,11 @@ if (previewBtn) {
       box.innerHTML = "";
     });
     document.getElementById("cancel-preview")?.addEventListener("click", () => { box.innerHTML = ""; if (status) status.textContent = ""; });
-    if (status) status.textContent = "";
+    // Notifikasi berhasil: sebelumnya status hanya dikosongkan, sehingga
+    // pratinjau yang berhasil terlihat sama saja dengan tidak terjadi apa-apa.
+    if (status) status.innerHTML = (data.diff && String(data.diff).trim() !== "(tidak ada perbedaan baris)")
+      ? `<div class="ok">Pratinjau berhasil dibuat. Periksa diff di bawah, lalu tekan “Simpan &amp; Terbitkan” bila sudah benar.</div>`
+      : `<div class="ok">Pratinjau berhasil dibuat, tetapi tidak ada perbedaan dengan versi sekarang — tidak ada yang perlu disimpan.</div>`;
   });
 }
 
