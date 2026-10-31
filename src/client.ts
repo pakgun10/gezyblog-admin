@@ -86,7 +86,8 @@ if (previewBtn) {
   previewBtn.addEventListener("click", async () => {
     const status = document.getElementById("status"); if (status) status.textContent = "Membuat pratinjau perubahan…";
     const isNew = (document.getElementById("isNew") as HTMLInputElement | null)?.value === "1";
-    const target = isNew ? "/api/posts/new/preview" : `/api/posts/${encodeURIComponent(slug)}/preview`;
+    const isAbout = (document.getElementById("isAbout") as HTMLInputElement | null)?.value === "1";
+    const target = isNew ? "/api/posts/new/preview" : isAbout ? "/api/about/preview" : `/api/posts/${encodeURIComponent(slug)}/preview`;
     const payload = collect();
     if (isNew) (payload as Record<string, unknown>).slug = slug;
     const { ok, data } = await postJson(target, payload);
@@ -100,7 +101,7 @@ if (previewBtn) {
       <p class="muted">Menyimpan berarti commit + push ke GitHub, lalu Cloudflare membangun ulang. Perubahan masih bisa dibatalkan lewat riwayat Git.</p></div>`;
     document.getElementById("confirm-btn")?.addEventListener("click", async () => {
       const st = document.getElementById("status"); if (st) st.textContent = "Menyimpan…";
-      const cTarget = isNew ? "/api/posts/new/confirm" : `/api/posts/${encodeURIComponent(slug)}/confirm`;
+      const cTarget = isNew ? "/api/posts/new/confirm" : isAbout ? "/api/about/confirm" : `/api/posts/${encodeURIComponent(slug)}/confirm`;
       const r = await postJson(cTarget, { token: data.token });
       if (!r.ok) { if (st) st.innerHTML = `<div class="err">${r.data.error || "Gagal menyimpan"}</div>`; return; }
       if (st) st.innerHTML = `<div class="ok">Tersimpan. Commit <code>${r.data.commit || "-"}</code>. ${r.data.push || ""} <a href="${r.data.liveUrl || "#"}">Lihat artikel live (beberapa menit lagi)</a> · <a href="/posts">Kembali ke daftar</a></div>`;

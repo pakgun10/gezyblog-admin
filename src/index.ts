@@ -304,6 +304,11 @@ Bun.serve({
       if (!clone) return json({ error: "Data tidak lengkap" }, 400);
       return handlePreview(new Request(req.url, { method: "POST", headers: req.headers, body: JSON.stringify(clone) }), slugify(String(clone.slug || clone.title || "")), true, false);
     }
+    // Rute Tentang Saya HARUS eksplisit: slug "__about__" mengandung garis bawah,
+    // jadi tidak cocok dengan regex slug artikel ([a-z0-9-]+) di bawah — tanpa
+    // rute ini, pratinjau Tentang Saya jatuh ke 404 HTML dan klien hanya
+    // menampilkan "Gagal membuat pratinjau" (bug yang dilaporkan 2026-10-31).
+    if (path === "/api/about/preview" && req.method === "POST") return handlePreview(req, "__about__", false, true);
     const prevMatch = path.match(/^\/api\/posts\/([a-z0-9-]+)\/preview$/);
     if (prevMatch && req.method === "POST") return handlePreview(req, prevMatch[1], false, false);
     async function handleConfirm(req: Request) {
@@ -345,6 +350,7 @@ Bun.serve({
       }
       return json({ commit: commitHash || "tidak ada perubahan", push: pushMsg, liveUrl: p.liveUrl });
     }
+    if (path === "/api/about/confirm" && req.method === "POST") return handleConfirm(req);
     if (path === "/api/posts/new/confirm" && req.method === "POST") return handleConfirm(req);
     const confMatch = path.match(/^\/api\/posts\/([a-z0-9-]+)\/confirm$/);
     if (confMatch && req.method === "POST") return handleConfirm(req);
