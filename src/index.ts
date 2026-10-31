@@ -38,10 +38,24 @@ interface PendingSave {
 // yang bisa ketinggalan push terbaru (mis. dari Gezymuse) — editor lalu
 // menampilkan versi lama dan simpan menimpanya. Pull gagal (mis. ada
 // perubahan lokal) tidak boleh diam-diam: pemanggil menampilkan peringatan.
+// Pembatas: pull jaringan (SSH ke GitHub) terasa berat bila dilakukan di
+// setiap klik, jadi pull dibatasi maksimal sekali tiap 5 menit. Di dalam
+// jeda itu halaman dibaca dari disk saja — kesegaran tertinggal maksimal
+// 5 menit, dan pengaman simpan (cek oldContent di konfirmasi) tetap
+// membatalkan simpan bila ada push baru di sela itu, jadi pembatas ini
+// tidak membuka lagi celah timpa diam-diam. Pull gagal tidak memperbarui
+// stempel waktu, supaya klik berikutnya mencoba lagi, bukan menunggu 5
+// menit dalam keadaan gagal. Restart service mengatur ulang stempel ke 0,
+// sehingga halaman pertama sesudah restart selalu menarik dulu.
+let lastPullAt = 0;
+const PULL_MIN_INTERVAL_MS = 5 * 60 * 1000;
 async function pullLatest(): Promise<{ ok: boolean; out: string }> {
   const hasRemote = (await runGit(REPO, ["remote"])).out.trim().length > 0;
   if (!hasRemote) return { ok: true, out: "" };
-  return runGit(REPO, ["pull", "--ff-only"]);
+  if (Date.now() - lastPullAt < PULL_MIN_INTERVAL_MS) return { ok: true, out: "" };
+  const pull = await runGit(REPO, ["pull", "--ff-only"]);
+  if (pull.ok) lastPullAt = Date.now();
+  return pull;
 }
 function pullWarning(pull: { ok: boolean; out: string }): string {
   if (pull.ok) return "";
@@ -348,6 +362,9 @@ Bun.serve({
           await runGit(REPO, ["rebase", "--abort"]);
           return json({ error: `Gagal menarik perubahan terbaru dari GitHub, simpanan dibatalkan supaya tidak menimpa: ${pull.out.slice(0, 300)}` }, 409);
         }
+        // Pull saat simpan juga menyegarkan clone, jadi halaman daftar
+        // sesudah simpan tidak perlu menarik lagi dalam 5 menit.
+        lastPullAt = Date.now();
       }
       // Pengaman timpa: bila berkas sudah berubah sejak pratinjau dibuat
       // (mis. push baru masuk setelah editor dibuka), batalkan simpan.
