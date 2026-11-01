@@ -17,7 +17,7 @@ button.secondary,.btn.secondary{background:#e5e7eb;color:#111827} button:disable
 pre.diff{white-space:pre-wrap;word-break:break-word;background:#111827;color:#e5e7eb;padding:12px;border-radius:10px;font-size:13px;max-height:60vh;overflow:auto}
 .sticky{position:sticky;bottom:0;background:#fff;border-top:1px solid #e5e7eb;padding:12px 0;display:flex;gap:8px;flex-wrap:wrap}
 .milkdown{border:1px solid #d1d5db;border-radius:10px;overflow:hidden} .milkdown .editor{padding:8px}
-</style>${extraHead}</head><body><header><a href="/posts"><b>GezyBlog Admin</b></a> <span style="opacity:.8">· blog Pak Gun</span></header><main>${body}</main></body></html>`;
+</style>${extraHead}</head><body><header><a href="/posts"><b>GezyBlog Admin</b></a> <span style="opacity:.8">·</span> <a href="https://site.pakgun.web.id/" target="_blank" rel="noopener">🌐 blog Pak Gun</a></header><main>${body}</main></body></html>`;
 }
 
 export function esc(s: string): string {
