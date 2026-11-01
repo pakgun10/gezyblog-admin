@@ -112,7 +112,7 @@ function loginPage(err = ""): string {
   <label>Nama pengguna</label><input type="text" name="username" required autocomplete="username">
   <label>Kata sandi</label><input type="password" name="password" required autocomplete="current-password">
   <p><button type="submit">Masuk</button></p>
-  <p class="muted">Hanya satu akun admin. Akun ini bukan akun GitHub; GitHub hanya dipakai di belakang layar saat push.</p>
+  <p class="muted">Satu tulisan yang akan terus terkenang jauh lebih baik daripada seribu tulisan yang dilupakan.</p>
   </form></div>`);
 }
 
